@@ -22,6 +22,9 @@ import {
   Trash2,
   X,
   Download,
+  Upload,
+  FileDown,
+  Loader2,
   AlertTriangle,
   HardHat,
   Thermometer,
@@ -39,6 +42,9 @@ import {
   submitFieldReport,
   approveFieldReport,
   getFieldReportPdfUrl,
+  importFieldReportsFile,
+  exportFieldReports,
+  downloadFieldReportsTemplate,
 } from './api';
 import type {
   FieldReport,
@@ -48,6 +54,7 @@ import type {
   WorkforceEntry,
   CreateFieldReportPayload,
   UpdateFieldReportPayload,
+  ImportResult,
 } from './api';
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
@@ -147,6 +154,7 @@ export function FieldReportsPage() {
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [editingReport, setEditingReport] = useState<FieldReport | null>(null);
 
   // ── Queries ──────────────────────────────────────────────────────────
@@ -226,6 +234,23 @@ export function FieldReportsPage() {
       queryClient.invalidateQueries({ queryKey: ['fieldreports'] });
       addToast({ type: 'success', title: '', message: t('fieldreports.approved', { defaultValue: 'Report approved' }) });
     },
+  });
+
+  // Export mutation
+  const exportMut = useMutation({
+    mutationFn: () => exportFieldReports(projectId),
+    onSuccess: () =>
+      addToast({
+        type: 'success',
+        title: t('fieldreports.export_success', { defaultValue: 'Export complete' }),
+        message: t('fieldreports.export_success_msg', { defaultValue: 'Excel file downloaded.' }),
+      }),
+    onError: (e: Error) =>
+      addToast({
+        type: 'error',
+        title: t('fieldreports.export_failed', { defaultValue: 'Export failed' }),
+        message: e.message,
+      }),
   });
 
   // ── Calendar navigation ──────────────────────────────────────────────
@@ -375,6 +400,29 @@ export function FieldReportsPage() {
             </button>
           </div>
 
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => exportMut.mutate()}
+            disabled={exportMut.isPending}
+            className="shrink-0 whitespace-nowrap"
+          >
+            {exportMut.isPending ? (
+              <Loader2 size={14} className="mr-1.5 animate-spin shrink-0" />
+            ) : (
+              <Download size={14} className="mr-1.5 shrink-0" />
+            )}
+            <span className="whitespace-nowrap">{t('fieldreports.export', { defaultValue: 'Export' })}</span>
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowImportModal(true)}
+            className="shrink-0 whitespace-nowrap"
+          >
+            <Upload size={14} className="mr-1.5 shrink-0" />
+            <span className="whitespace-nowrap">{t('fieldreports.import', { defaultValue: 'Import' })}</span>
+          </Button>
           <Button size="sm" onClick={handleOpenNew} className="shrink-0 whitespace-nowrap">
             <Plus size={14} className="mr-1.5 shrink-0" />
             <span className="whitespace-nowrap">{t('fieldreports.new_report', { defaultValue: 'New Report' })}</span>
@@ -722,6 +770,192 @@ export function FieldReportsPage() {
           loading={createMut.isPending || updateMut.isPending}
         />
       )}
+
+      {/* Import modal */}
+      {showImportModal && (
+        <ImportFieldReportsModal
+          projectId={projectId}
+          onClose={() => setShowImportModal(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['fieldreports'] });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Import Field Reports Modal ─────────────────────────────────────────── */
+
+function ImportFieldReportsModal({
+  projectId,
+  onClose,
+  onSuccess,
+}: {
+  projectId: string;
+  onClose: () => void;
+  onSuccess: (result: ImportResult) => void;
+}) {
+  const { t } = useTranslation();
+  const [file, setFile] = useState<File | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ImportResult | null>(null);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped) setFile(dropped);
+  }, []);
+
+  const handleImport = async () => {
+    if (!file) return;
+    setIsPending(true);
+    setError(null);
+    try {
+      const res = await importFieldReportsFile(file, projectId);
+      setResult(res);
+      onSuccess(res);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-lg bg-surface-elevated rounded-xl shadow-xl border border-border animate-card-in mx-4 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border-light">
+          <h2 className="text-lg font-semibold text-content-primary">
+            {t('fieldreports.import_reports', { defaultValue: 'Import Field Reports' })}
+          </h2>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-content-tertiary hover:bg-surface-secondary hover:text-content-primary transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-4 space-y-4">
+          {/* Drop zone */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={handleDrop}
+            className={clsx(
+              'flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors cursor-pointer',
+              dragActive
+                ? 'border-oe-blue bg-oe-blue-subtle/20'
+                : 'border-border hover:border-oe-blue/50',
+            )}
+            onClick={() => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.xlsx,.csv,.xls';
+              input.onchange = (e) => {
+                const f = (e.target as HTMLInputElement).files?.[0];
+                if (f) setFile(f);
+              };
+              input.click();
+            }}
+          >
+            <Upload size={24} className="text-content-tertiary mb-2" />
+            <p className="text-sm text-content-secondary text-center">
+              {file
+                ? file.name
+                : t('fieldreports.drop_file', {
+                    defaultValue: 'Drop Excel or CSV file here, or click to browse',
+                  })}
+            </p>
+            <p className="text-xs text-content-quaternary mt-1">
+              {t('fieldreports.file_types', { defaultValue: '.xlsx, .csv — max 10 MB' })}
+            </p>
+          </div>
+
+          {/* Template download */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              downloadFieldReportsTemplate();
+            }}
+            className="flex items-center gap-1.5 text-xs text-oe-blue hover:underline"
+          >
+            <FileDown size={13} />
+            {t('fieldreports.download_template', { defaultValue: 'Download import template' })}
+          </button>
+
+          {/* Error */}
+          {error && (
+            <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-3 text-sm text-semantic-error">
+              {error}
+            </div>
+          )}
+
+          {/* Result */}
+          {result && (
+            <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 p-3 text-sm text-content-primary space-y-1">
+              <p>
+                {t('fieldreports.import_result', {
+                  defaultValue: 'Imported: {{imported}}, Skipped: {{skipped}}, Errors: {{errors}}',
+                  imported: result.imported,
+                  skipped: result.skipped,
+                  errors: result.errors.length,
+                })}
+              </p>
+              {result.errors.length > 0 && (
+                <details className="text-xs text-content-tertiary">
+                  <summary className="cursor-pointer">
+                    {t('fieldreports.show_errors', { defaultValue: 'Show error details' })}
+                  </summary>
+                  <ul className="mt-1 space-y-0.5 max-h-32 overflow-y-auto">
+                    {result.errors.slice(0, 20).map((err, i) => (
+                      <li key={i}>
+                        {t('fieldreports.row_error', {
+                          defaultValue: 'Row {{row}}: {{error}}',
+                          row: err.row,
+                          error: err.error,
+                        })}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-light">
+          <Button variant="ghost" onClick={onClose}>
+            {result
+              ? t('common.close', { defaultValue: 'Close' })
+              : t('common.cancel', { defaultValue: 'Cancel' })}
+          </Button>
+          {!result && (
+            <Button
+              variant="primary"
+              onClick={handleImport}
+              disabled={!file || isPending}
+            >
+              {isPending ? (
+                <Loader2 size={16} className="animate-spin mr-1.5" />
+              ) : (
+                <Upload size={16} className="mr-1.5" />
+              )}
+              <span>{t('fieldreports.import_btn', { defaultValue: 'Import' })}</span>
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

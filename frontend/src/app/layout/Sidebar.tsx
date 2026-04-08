@@ -79,7 +79,7 @@ const navGroups: NavGroup[] = [
     items: [
       { labelKey: 'nav.dashboard', to: '/', icon: LayoutDashboard },
       { labelKey: 'projects.title', to: '/projects', icon: FolderOpen, tourId: 'projects' },
-      { labelKey: 'contacts.title', to: '/contacts', icon: Users },
+      { labelKey: 'nav.reports', to: '/reports', icon: FileBarChart, advancedOnly: true },
     ],
   },
   {
@@ -147,6 +147,7 @@ const navGroups: NavGroup[] = [
     defaultOpen: false,
     hideInSimple: true,
     items: [
+      { labelKey: 'contacts.title', to: '/contacts', icon: Users },
       { labelKey: 'meetings.title', to: '/meetings', icon: CalendarDays },
       { labelKey: 'rfi.title', to: '/rfi', icon: HelpCircle, advancedOnly: true },
       { labelKey: 'submittals.title', to: '/submittals', icon: FileCheck, advancedOnly: true },
@@ -192,7 +193,6 @@ const navGroups: NavGroup[] = [
     items: [
       { labelKey: 'nav.field_reports', to: '/field-reports', icon: ClipboardList },
       { labelKey: 'nav.requirements', to: '/requirements', icon: ClipboardCheck },
-      { labelKey: 'nav.reports', to: '/reports', icon: FileBarChart, advancedOnly: true },
     ],
   },
   {

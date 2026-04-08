@@ -4,7 +4,8 @@
  * All endpoints are prefixed with /v1/fieldreports/.
  */
 
-import { apiGet, apiPost, apiPatch, apiDelete } from '@/shared/lib/api';
+import { apiGet, apiPost, apiPatch, apiDelete, triggerDownload } from '@/shared/lib/api';
+import { useAuthStore } from '@/stores/useAuthStore';
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 
@@ -169,4 +170,98 @@ export async function fetchFieldReportCalendar(
 
 export function getFieldReportPdfUrl(id: string): string {
   return `/api/v1/fieldreports/reports/${id}/export/pdf`;
+}
+
+/* ── Import / Export ────────��─────────────────────────────────────────────── */
+
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+  errors: { row: number; error: string; data: Record<string, string> }[];
+  total_rows: number;
+}
+
+export async function importFieldReportsFile(
+  file: File,
+  projectId: string,
+): Promise<ImportResult> {
+  const token = useAuthStore.getState().accessToken;
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(
+    `/api/v1/fieldreports/reports/import/file?project_id=${encodeURIComponent(projectId)}`,
+    {
+      method: 'POST',
+      headers,
+      body: formData,
+    },
+  );
+
+  if (!response.ok) {
+    let detail = 'Import failed';
+    try {
+      const body = await response.json();
+      detail = body.detail || detail;
+    } catch {
+      // ignore parse error
+    }
+    throw new Error(detail);
+  }
+
+  return response.json();
+}
+
+export async function exportFieldReports(projectId: string): Promise<void> {
+  const token = useAuthStore.getState().accessToken;
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(
+    `/api/v1/fieldreports/reports/export?project_id=${encodeURIComponent(projectId)}`,
+    { method: 'GET', headers },
+  );
+  if (!response.ok) {
+    let detail = 'Export failed';
+    try {
+      const body = await response.json();
+      detail = body.detail || detail;
+    } catch {
+      // ignore parse error
+    }
+    throw new Error(detail);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition');
+  const filename =
+    disposition?.match(/filename="?(.+)"?/)?.[1] || 'field_reports_export.xlsx';
+  triggerDownload(blob, filename);
+}
+
+export function downloadFieldReportsTemplate(): void {
+  const token = useAuthStore.getState().accessToken;
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  fetch('/api/v1/fieldreports/reports/template', { method: 'GET', headers })
+    .then((response) => {
+      if (!response.ok) throw new Error('Failed to download template');
+      return response.blob();
+    })
+    .then((blob) => {
+      triggerDownload(blob, 'field_reports_import_template.xlsx');
+    })
+    .catch((err) => {
+      console.error('Template download error:', err);
+    });
 }
