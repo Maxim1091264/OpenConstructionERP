@@ -10,9 +10,9 @@ It combines:
 - quantity extraction
 - Russian standards mapping
 - supplier pricing and RFQ workflows
-- estimate generation and export
+- draft estimate assembly and export to GrandSmeta-ready formats
 
-The architecture is designed for human-in-the-loop operation. AI is used to accelerate extraction and draft generation, while estimators maintain review and approval authority.
+The architecture is designed for human-in-the-loop operation. AI is used to accelerate extraction and draft generation, while estimators maintain review and approval authority. GrandSmeta is the authoritative estimating environment for final estimate production in MVP.
 
 ---
 
@@ -45,14 +45,15 @@ flowchart TD
     D --> E[Canonical Estimating Model]
     E --> F[Standards Mapping Layer<br/>ФСНБ-2022 / ГЭСН / ФЕР / ТЕР]
     E --> G[Supplier Pricing Layer]
-    F --> H[Estimate Drafting Engine]
+    F --> H[Draft Estimate Assembly]
     G --> H
     H --> I[Assumption & Question Engine]
-    I --> J[Review & Approval Workflow]
-    J --> K[BOQ / VOR / Estimate Positions]
-    J --> L[RFQ & Supplier Comparison]
-    K --> M[Export Adapters<br/>Excel / GrandSmeta / SmetaPlan]
-    L --> M
+    I --> J[Pre-Expertise Self-Check]
+    J --> K[Export Adapters<br/>GrandSmeta import Excel + review Excel]
+    K --> L[Estimator finalizes estimate in GrandSmeta]
+    L --> M[Submit to government expertise]
+    M --> N[Upload expertise comments]
+    N --> O[Expertise Comments Analyzer]
 ```
 
 ---
@@ -75,7 +76,7 @@ Primary repository fit:
 ### 4.2 Document Understanding Layer
 
 Responsibilities:
-- OCR for scanned PDFs and images
+- data extraction from scanned documents and images
 - table extraction from Excel / Word / specifications
 - section and entity classification
 - metadata extraction from drawings and BIM files
@@ -160,11 +161,12 @@ Primary repository fit:
 ### 4.8 Export Layer
 
 Responsibilities:
-- generate exports for Excel, GrandSmeta, SmetaPlan, and downstream workflows
+- generate GrandSmeta import Excel and review Excel packages
+- prepare downstream workflows for GrandSmeta and future SmetaPlan export
 
 Primary repository fit:
 - existing `boq`
-- new `export_adapters`
+- new `grandsmeta_excel_export_ru`
 
 ---
 
@@ -204,8 +206,10 @@ Primary repository fit:
 - `standards_mapping`
 - `supplier_pricing_engine`
 - `rfq_orchestrator`
-- `export_adapters`
+- `grandsmeta_excel_export_ru`
 - `assumption_engine`
+- `pre_expertise_self_check_ru`
+- `expertise_comments_analyzer_ru`
 
 ---
 
@@ -217,11 +221,12 @@ Primary repository fit:
 4. The normalization layer converts the extracted data into canonical estimate objects.
 5. The standards mapping layer assigns candidates for Russian norms.
 6. The pricing layer attaches material / equipment price options.
-7. The drafting engine creates a BOQ / VOR / estimate draft.
+5. The drafting engine creates a BOQ / VOR / draft estimate package.
 8. The assumption engine creates follow-up questions and risk notes.
 9. Estimators review the draft and confirm or edit it.
-10. RFQ and supplier-comparison workflows are triggered where needed.
-11. The export layer creates Excel, GrandSmeta, and SmetaPlan-ready data structures.
+10. The export layer creates GrandSmeta import Excel plus review Excel and downstream data structures.
+11. The estimator finalizes the estimate inside GrandSmeta, then submits it to government expertise.
+12. Expertise comments are uploaded back into the AI system and analyzed for linkage to items, norms, assumptions, source documents, and missing-data issues.
 
 ---
 
