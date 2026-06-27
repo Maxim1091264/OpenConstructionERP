@@ -8,6 +8,7 @@ class SourceArtifact:
     artifact_id: str
     original_filename: str
     source_type: str
+    storage_path: Optional[str] = None
     discipline: Optional[str] = None
     checksum: Optional[str] = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -32,6 +33,7 @@ class QuantityItem:
     quantity: Optional[float] = None
     unit: Optional[str] = None
     measurement_basis: Optional[str] = None
+    source_reference: Optional[str] = None
 
 
 @dataclass(slots=True)
@@ -43,6 +45,7 @@ class WorkItem:
     unit: Optional[str] = None
     status: str = "draft"
     estimated_category: Optional[str] = None
+    source_reference: Optional[str] = None
 
 
 @dataclass(slots=True)
