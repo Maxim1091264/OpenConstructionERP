@@ -1,9 +1,10 @@
-﻿"""Adapter for PDF-based data extraction from text-friendly PDFs."""
+﻿"""Adapter for PDF-based data extraction with page-level APIs."""
 
 from __future__ import annotations
 
 import re
 from uuid import uuid4
+from typing import List
 
 try:
     from pypdf import PdfReader
@@ -19,62 +20,62 @@ from app.modules.ai_smeta_ru.domain.models import ExtractedObject
 
 
 class PdfAdapter:
-    """Extracts text blocks from PDF files using available PDF text readers."""
+    """Extracts page-level text from PDFs and provides helper APIs.
 
-    def extract(self, file_path: str, artifact_id: str | None = None) -> list[ExtractedObject]:
+    The adapter exposes `extract_pages()` which returns a list of (page_number, text)
+    and `extract()` which returns one ExtractedObject per page (not per block).
+    """
+
+    def extract_pages(self, file_path: str) -> List[tuple[int, str]]:
+        """Return list of (page_number, text) for every page in the PDF.
+
+        Uses pypdf when available, falls back to PyMuPDF (fitz).
+        """
         if PdfReader is not None:
-            return self._extract_with_pypdf(file_path, artifact_id)
+            return self._pages_with_pypdf(file_path)
 
         if fitz is not None:
-            return self._extract_with_pymupdf(file_path, artifact_id)
+            return self._pages_with_pymupdf(file_path)
 
         raise ImportError(
-            "PDF extraction requires pypdf or pymupdf. Install one of them with: pip install pypdf pymupdf"
+            "PDF page extraction requires pypdf or pymupdf. Install one of them with: pip install pypdf pymupdf"
         )
 
-    def _extract_with_pypdf(self, file_path: str, artifact_id: str | None) -> list[ExtractedObject]:
-        reader = PdfReader(file_path)
+    def extract(self, file_path: str, artifact_id: str | None = None) -> list[ExtractedObject]:
+        pages = self.extract_pages(file_path)
         artifact_id = artifact_id or str(uuid4())
         objects: list[ExtractedObject] = []
 
+        for page_number, text in pages:
+            object_id = f"pdf-page-{page_number}-{uuid4().hex}"
+            objects.append(
+                ExtractedObject(
+                    object_id=object_id,
+                    artifact_id=artifact_id,
+                    object_type="page",
+                    raw_text=text,
+                    normalized_text=text,
+                    confidence=0.85,
+                )
+            )
+
+        return objects
+
+    def _pages_with_pypdf(self, file_path: str) -> List[tuple[int, str]]:
+        reader = PdfReader(file_path)
+        pages: List[tuple[int, str]] = []
         for page_index, page in enumerate(reader.pages, start=1):
             text = page.extract_text() or ""
-            for block_index, block in enumerate(self._split_text_blocks(text), start=1):
-                object_id = f"pdf-pypdf-{page_index}-{block_index}-{uuid4().hex}"
-                objects.append(
-                    ExtractedObject(
-                        object_id=object_id,
-                        artifact_id=artifact_id,
-                        object_type="paragraph",
-                        raw_text=block,
-                        normalized_text=block,
-                        confidence=0.8,
-                    )
-                )
+            pages.append((page_index, text))
+        return pages
 
-        return objects
-
-    def _extract_with_pymupdf(self, file_path: str, artifact_id: str | None) -> list[ExtractedObject]:
+    def _pages_with_pymupdf(self, file_path: str) -> List[tuple[int, str]]:
         doc = fitz.open(file_path)
-        artifact_id = artifact_id or str(uuid4())
-        objects: list[ExtractedObject] = []
-
+        pages: List[tuple[int, str]] = []
         for page_index, page in enumerate(doc, start=1):
             text = page.get_text("text") or ""
-            for block_index, block in enumerate(self._split_text_blocks(text), start=1):
-                object_id = f"pdf-pymupdf-{page_index}-{block_index}-{uuid4().hex}"
-                objects.append(
-                    ExtractedObject(
-                        object_id=object_id,
-                        artifact_id=artifact_id,
-                        object_type="paragraph",
-                        raw_text=block,
-                        normalized_text=block,
-                        confidence=0.8,
-                    )
-                )
-
-        return objects
+            pages.append((page_index, text))
+        return pages
 
     def _split_text_blocks(self, text: str) -> list[str]:
         blocks = [block.strip() for block in re.split(r"\n{2,}", text) if block.strip()]
